@@ -1,0 +1,23 @@
+(;module: {#;doc "This will be our program's main module."}
+  lux
+  (lux (control ["m" monad]
+                ["a" applicative]
+                ["f" functor]
+                ["parse" parser])
+       io
+       [cli #+ program:]
+       (type auto)
+       (data (text ["format" format])
+            [text #+ "Text/" Monoid<Text>]
+            ["E" result]
+            (coll ["L" list]))
+       (macro ["s" syntax])
+       (macro ["p" poly])
+       [host]
+       [macro #- run]
+       (macro ["ast" code])))
+
+
+(program: args
+          (io (log! ($_ Text/append "Hello, world!" " testing"))))
+

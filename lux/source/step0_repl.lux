@@ -1,0 +1,50 @@
+(;module: {#;doc "This will be our program's main module."}
+  lux
+  util
+  ReadPrint
+  (lux (control ["m" monad]
+                ["a" applicative]
+                ["f" functor]
+                ["parse" parser])
+       io
+       [cli #+ program:]
+       (type auto)
+       (data (text ["format" format])
+            [text #+ "Text/" Monoid<Text>]
+            ["M" maybe]
+            ["E" result]
+            (coll ["L" list]
+                  ["array" array]))
+       (macro ["s" syntax])
+       (macro ["p" poly])
+       [host]
+       [macro #- run]
+       (macro ["ast" code])))
+
+(def: READ
+  (IO (Maybe Text))
+  readLine)
+
+(def: (EVAL arg)
+  (:: Monad<IO> wrap arg))
+
+(def: (PRINT arg)
+  (-> (Maybe Text) (IO []))
+  (case arg
+    (#;Some t) (printLine t)
+    _          (:: Monad<IO> wrap (exit 0))))
+
+(def: (rep arg)
+  (-> [] (IO []))
+  (m;do Monad<IO>
+      [ _ (print "userx> ")
+       mInput (READ)
+       _ (PRINT mInput)]
+      (wrap [])))
+
+(def: (repl arg)
+  (-> [] (IO []))
+  (bind Monad<IO> (rep []) repl ))
+
+(program: args (repl []))
+

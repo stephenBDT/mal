@@ -1,0 +1,31 @@
+(;module: {#;doc " Just my Utility functions"}
+          lux
+          (lux (control ["m" monad]
+                        ["parse" parser])
+               (data (coll ["L" list]))
+               [macro #- run]
+               (macro ["s" syntax])
+               (macro ["ast" code])))
+
+
+
+(def: #export (bind monad ma f)
+  (All [M a b]
+    (-> (m;Monad M)
+        (M a)
+        (-> a (M b))
+        (M b)))
+  (|> ma
+      (:: monad map f)
+      (:: monad join)))
+
+(def: (lambdaParser)
+  (s;Syntax [(List Ident) Code])
+  (parse;seq (parse;many s;symbol) s;any))
+
+
+(s;syntax: (/. [[variables body] lambdaParser])
+           (wrap (list (` (function [(~@ ((:: L;Functor<List> map) ast;symbol variables))] (~ body))))))
+
+
+## (:: monad join ((:: monad map f) ma)))
