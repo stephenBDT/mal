@@ -1,0 +1,185 @@
+(;module: {#;doc "This will be our program's main module."}
+  lux
+  (lux (control ["m" monad] ["a" applicative] ["f" functor] )
+       (codata io)
+       [cli #+ program:]
+       (type auto)
+       (data (text ["format" format])
+            [text #+ "Text/" Monoid<Text>]
+            ["E" error]
+            (struct ["L" list]))
+       (macro ["s" syntax])
+       (macro ["p" poly])
+       host
+       [compiler #+ Monad<Lux> macro-expand-1]
+       macro
+       (macro ["ast" ast])))
+
+(jvm-import java.net.URLConnection)
+
+(jvm-import java.net.URL
+  (new [String] #try)
+  (openConnection [] #try URLConnection))
+
+(jvm-import java.net.HttpURLConnection)
+
+(def: (new-url url-string)
+  (-> Text (E;Error URL))
+  (URL.new url-string))
+
+(macro: (bind tokens)
+        (case tokens
+          (^ (list a)) (:: Monad<Lux> wrap (list a))
+
+          (#;Cons [b rest])
+            (m;do Monad<Lux>
+              [bound (bind rest)]
+              (wrap (list (`  (::: m;join (::: f;map (~ b) (~@ bound)))))))
+
+            _ (lambda [_] (#E;Error "wrong usage"))))
+
+
+(s;syntax: (html1 [name s;local-symbol])
+           (wrap (list (ast;text name))))
+
+
+(def: (testCase arg)
+  (-> [Bool [Bool Bool]] Bool)
+  (case arg
+    [_ [true _]] true
+    [_ [fasle _]] true))
+
+(s;syntax: (tryParsers [[parserPairs tokens] (s;seq (s;many (s;seq s;any s;any)) s;any)])
+         {#;doc
+          (doc "tryParsers expects parser function pairs and tries to parse the parsers 
+                for left to right, executing the paired function for the first parsers that suceeds")}
+         (let [res
+               (`' (:: L;Fold<List> fold
+                       (: All [a] (-> [(s;Syntax a) (-> a (s;Syntax lux;AST))] (Maybe lux;AST) (Maybe lux;AST))
+                        (lambda [[parser func] acc]
+                          (case acc
+                            (#;Some _) acc
+                            #;None (case  (s;run (list (~ tokens)) parser)
+                                     (#;Error _) acc
+                                     (#;Success [resAst a]) (#;Some (func a))))))
+                      #;None (list (~@ (:: L;Functor<List> map (lambda [[a b]] (ast;tuple (list a b))) parserPairs)))))]
+           (wrap (list res))))
+
+
+## (s;syntax: (tryParsers2 [[[[p1 f1] [p2 f2]] tokens] (s;seq (s;seq (s;seq s;any s;any) (s;seq s;any s;any)) s;any)])
+##            (let [res
+##                  (`' (case  (s;run (list (~ tokens)) (~ p1))
+##                        ((#;Success [resAst a]) (#;Success (~ (f1 a))))
+##                        (#;Error _) (case  (s;run (list (~ tokens)) (~ p2))
+##                                      (#;Success [resAst2 a2]) (#;Success (~ (f2 a)))
+##                                      error error)))]
+##              (wrap (list res))))
+##              ## (lambda [c] (:: E;Functor<Error> map (lambda [ast] [c (list ast)]) res))))
+
+(type: Attributes (List [Text Text]))
+(type: TagName Text)
+
+(type: #rec Html
+       (#Content (Maybe Text))
+       (#Tag TagName Attributes Html))
+
+(def: (optToList opt)
+  (All [a] (-> (Maybe (List a)) (List a)))
+  (case opt
+    #;None (list)
+    (#;Some a) a
+     )
+  )
+
+(def: #export (rec syntax)
+  {#;doc "Combinator for recursive parser."}
+  (All [a] (-> (-> (s;Syntax a) (s;Syntax a)) (s;Syntax a)))
+  (lambda [inputs]
+            (s;run inputs (syntax (rec syntax)))))
+
+(def: (attrParser)
+  (s;Syntax Attributes)
+  (:: s;Functor<Syntax> map optToList
+      (s;opt (s;tuple (s;many (s;seq s;local-tag s;local-symbol)))))
+   )
+
+(def: (tagParser)
+  (s;Syntax [TagName Attributes])
+  (s;seq s;local-symbol attrParser))
+
+(def: (htmlParser _)
+  (m;do s;Monad<Syntax>
+        [res (s;alt (s;alt s;text s;end?) (s;form (s;seq tagParser (htmlParser []))))
+         #let [html (case res
+                      (#;Left (#;Left t)) (#Content (#;Some t))
+                      (#;Left (#;Right true)) (#Content #;None)
+                      (#;Left (#;Right false)) (#Content #;None)
+                      (#;Right [[tagName attr] html]) (#Tag tagName attr html))]]
+        (wrap html)))
+
+(def: (formContent)
+  (m;do s;Monad<Syntax>
+        [[_ form](s;form (s;seq (s;exactly +2 s;any) s;any))]
+   (wrap (list form))))
+
+(def: (formParser)
+  (s;form (s;seq s;local-symbol (s;tuple (s;many (s;seq s;local-tag s;text))))))
+
+
+(s;syntax: (html [[tagname attr] formParser] [content formContent])
+           (wrap (list (ast;text tagname))))
+
+
+(def: (new-connection url-string)
+  (-> Text (E;Error URLConnection))
+  ## (::: join (::: map (URL.openConnection []) (new-url url-string))))
+  (bind (URL.openConnection [])
+        (new-url url-string)))
+
+(program: args
+          (io (log! ($_ Text/append "Hello, world!" (html (yesting [#t1 "t2"]))))))
+
+## (struct: #export (CompF f1 f2)
+##          (All [F1 F2] (-> (Functor F1) (Functor F2) (Functor (All [a] (F1 (F2 a))))))
+
+##          (def: (map f f1f2a)
+##            (:: f1 map (:: f2 map f) f1f2a)))
+
+## (struct: #export (CompApp app1 app2)
+##          (All [A1 A2] (-> (Applicative A1) (Applicative A2) (Applicative (All [a] (A1 (A2 a))))))
+##          (def: functor (CompF (:: app1 functor) (:: app2 functor)))
+
+##          (def: (wrap x) (:: app1 wrap (:: app2 wrap x)))
+
+##          (def: (apply f a1a2x)
+##            (:: app1 apply (:: app2 apply f) a1a2x))
+##          )
+
+
+
+
+## (def: (bind m binders)
+##   (All [m a] (->  (Monad m) (List (m a)) (m a)))
+##   (case binders
+##     (^ (list a)) a
+##     (#;Cons a rest) (:: join m (:: map))
+##     )
+##   (L;head binders)
+##   )
+
+## (macro: (doNothing tokens)
+##         (:: Monad<Lux> wrap (' (~ tokens))))
+
+## (macro: (showAst tokens)
+##         (exec (map (. log! encode-ast) tokens)
+##           (:: Monad<Lux> wrap (list))))
+## (showAst (bind "test"))
+## (macro-expand-1 ('  "hallo"))
+
+  ## (::: join (::: map (URL.openConnection []) (new-url url-string))))
+
+## (def: (new-connection url)
+##
+##   (:! HttpURLConnection (openConnection (new url))))
+
+  ## (openConnection ))

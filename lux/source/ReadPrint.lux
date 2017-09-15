@@ -1,0 +1,49 @@
+(;module: {#;doc " This lets you interact with the Commandline on the jvm"}
+          lux
+          (lux
+           io
+           [host]
+           ))
+
+(host;import java.io.PrintWriter
+             (new [java.io.File] #io #try)
+             (println [java.lang.String] #io void))
+
+(host;import java.io.PrintStream
+             (println [String] #io void)
+             (print  #as printing [String] #io void))
+
+(host;import java.io.InputStream)
+(host;import java.io.Reader)
+
+(host;import java.io.InputStreamReader
+             (new [InputStream]))
+
+(host;import java.io.BufferedReader
+             (new [Reader])
+             (readLine [] #io #? String))
+
+(host;import java.lang.System
+             (#static exit [int] void)
+             (#static out PrintStream)
+             (#static in InputStream))
+
+(def: (inputReader)
+  (BufferedReader)
+  (BufferedReader.new [(InputStreamReader.new [System.in])]))
+
+(def: #export (readLine)
+  (IO (Maybe Text))
+  (BufferedReader.readLine [] inputReader))
+
+(def: #export (printLine text)
+  (-> Text (IO []))
+  (PrintStream.println [text] System.out))
+
+(def: #export (print text)
+  (-> Text (IO []))
+  (PrintStream.printing [text] System.out))
+
+(def: #export (exit status)
+  (-> Int [])
+  (System.exit status))
